@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análise de Vigas: Inclinação e Deslocamento</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .section-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            margin-bottom: 1.5rem;
+        }
+        .input-group {
+            margin-bottom: 1rem;
+        }
+        .input-group label {
+            display: block;
+            color: #4a5568;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+        .input-group input, .input-group select {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid #d2d6dc;
+            border-radius: 0.375rem;
+            transition: border-color 0.2s;
+        }
+        .input-group input:focus, .input-group select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px #bfdbfe;
+        }
+        .btn {
+            padding: 0.6rem 1.2rem;
+            border-radius: 0.375rem;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-primary {
+            background-color: #3b82f6;
+        }
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+        .btn-secondary {
+            background-color: #6b7280;
+        }
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+        .btn-danger {
+            background-color: #ef4444;
+        }
+        .btn-danger:hover {
+            background-color: #dc2626;
+        }
+        #beam-canvas-container {
+            position: relative;
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            height: 400px;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        #tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            transform: translate(-50%, -120%);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">Análise de Vigas por Momentos de Área</h1>
+            <p class="mt-2 text-lg text-gray-600">Ferramenta didática para visualização de inclinação e deslocamento.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Coluna de Entradas -->
+            <div class="lg:col-span-1">
+                <div class="section-card">
+                    <h2 class="text-xl font-semibold mb-4 border-b pb-2">1. Configuração da Viga</h2>
+                    
+                    <div class="input-group">
+                        <label for="beam-type">Tipo de Viga:</label>
+                        <select id="beam-type">
+                            <option value="cantilever">Engastada</option>
+                            <option value="simply-supported">Bi-apoiada</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="beam-length">Comprimento da Viga (m):</label>
+                        <input type="number" id="beam-length" value="5" min="1">
+                    </div>
+
+                    <div class="input-group">
+                        <label for="elasticity-modulus">Módulo de Elasticidade (GPa):</label>
+                        <input type="number" id="elasticity-modulus" value="200" min="1">
+                    </div>
+                </div>
+
+                <div class="section-card">
+                    <h2 class="text-xl font-semibold mb-4 border-b pb-2">2. Seção Transversal</h2>
+                    <div class="input-group">
+                        <label for="section-type">Tipo de Seção:</label>
+                        <select id="section-type">
+                            <option value="square">Quadrada</option>
+                            <option value="i-profile">Perfil I</option>
+                        </select>
+                    </div>
+                    <div id="section-inputs"></div>
+                    <div class="mt-4 text-right">
+                      <p class="text-left text-sm text-gray-500">Momento de Inércia (I):</p>
+                      <p id="moment-of-inertia" class="text-left text-lg font-semibold">0 m⁴</p>
+                    </div>
+                </div>
+
+                <div class="section-card">
+                    <h2 class="text-xl font-semibold mb-4 border-b pb-2">3. Esforços Aplicados</h2>
+                    <div class="input-group">
+                        <label for="load-type">Tipo de Esforço:</label>
+                        <select id="load-type">
+                            <option value="point">Carga Pontual (kN)</option>
+                            <option value="moment">Momento Concentrado (kNm)</option>
+                            <option value="rect">Carregamento Retangular (kN/m)</option>
+                            <option value="tri">Carregamento Triangular (kN/m)</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="input-group">
+                            <label for="load-magnitude">Módulo:</label>
+                            <input type="number" id="load-magnitude" value="10">
+                        </div>
+                        <div class="input-group">
+                            <label for="load-position">Posição (m):</label>
+                            <input type="number" id="load-position" value="2.5">
+                        </div>
+                    </div>
+                    <div class="input-group hidden" id="load-end-position-group">
+                        <label for="load-end-position">Posição Final (m):</label>
+                        <input type="number" id="load-end-position" value="4">
+                    </div>
+
+                    <div class="text-right">
+                        <button id="add-load-btn" class="btn btn-primary">Adicionar Esforço</button>
+                    </div>
+
+                    <div class="mt-4">
+                        <h3 class="font-semibold">Lista de Esforços:</h3>
+                        <ul id="loads-list" class="mt-2 text-gray-700 list-disc list-inside"></ul>
+                    </div>
+                </div>
+                
+                 <div class="flex justify-center mt-4">
+                    <button id="calculate-btn" class="btn btn-primary w-full text-lg">Calcular e Desenhar</button>
+                </div>
+
+            </div>
+
+            <!-- Coluna de Resultados e Gráfico -->
+            <div class="lg:col-span-2">
+                <div class="section-card">
+                    <h2 class="text-xl font-semibold mb-4">4. Representação Gráfica</h2>
+                    <div id="beam-canvas-container" class="relative">
+                        <canvas id="beam-canvas"></canvas>
+                        <div id="tooltip"></div>
+                    </div>
+                    <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p class="text-sm text-blue-800">Mova o cursor sobre a viga para ver a inclinação e o deslocamento em pontos específicos.</p>
+                    </div>
+                </div>
+                 <div class="section-card">
+                    <h2 class="text-xl font-semibold mb-4">5. Resultados no Ponto</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                        <div>
+                            <p class="text-sm text-gray-500">Posição (x)</p>
+                            <p id="result-position" class="text-2xl font-bold">- m</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Inclinação (θ)</p>
+                            <p id="result-slope" class="text-2xl font-bold">- rad</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">Deslocamento (v)</p>
+                            <p id="result-deflection" class="text-2xl font-bold">- mm</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const sectionTypeSelect = document.getElementById('section-type');
+        const sectionInputsDiv = document.getElementById('section-inputs');
+        const momentOfInertiaP = document.getElementById('moment-of-inertia');
+        const calculateBtn = document.getElementById('calculate-btn');
+        const canvas = document.getElementById('beam-canvas');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('tooltip');
+        const canvasContainer = document.getElementById('beam-canvas-container');
+        
+        const beamTypeSelect = document.getElementById('beam-type');
+        const beamLengthInput = document.getElementById('beam-length');
+        const elasticityModulusInput = document.getElementById('elasticity-modulus');
+
+        const loadTypeSelect = document.getElementById('load-type');
+        const loadMagnitudeInput = document.getElementById('load-magnitude');
+        const loadPositionInput = document.getElementById('load-position');
+        const loadEndPositionGroup = document.getElementById('load-end-position-group');
+        const loadEndPositionInput = document.getElementById('load-end-position');
+        const addLoadBtn = document.getElementById('add-load-btn');
+        const loadsListUl = document.getElementById('loads-list');
+        
+        const resultPosition = document.getElementById('result-position');
+        const resultSlope = document.getElementById('result-slope');
+        const resultDeflection = document.getElementById('result-deflection');
+
+        // State
+        let loads = [];
+        let beam = { length: 5, E: 200, I: 0, type: 'cantilever', elasticCurve: [], reactions: {} };
+        
+        // Data for I-Profiles (Moment of Inertia Ix in m^4)
+        const iProfileData = {
+            "W250 x 149": 259e-6, "W250 x 80": 126e-6, "W250 x 67": 104e-6,
+            "W250 x 58": 87.3e-6, "W250 x 45": 71.1e-6, "W250 x 28": 39.9e-6,
+            "W250 x 22": 28.8e-6, "W250 x 18": 22.5e-6, "W200 x 100": 113e-6,
+            "W200 x 86": 94.7e-6, "W200 x 71": 76.6e-6, "W200 x 59": 61.2e-6,
+            "W200 x 46": 45.5e-6, "W200 x 36": 34.4e-6, "W200 x 22": 20.0e-6,
+            "W150 x 37": 22.2e-6, "W150 x 30": 17.1e-6, "W150 x 22": 12.1e-6,
+            "W150 x 18": 9.19e-6, "W150 x 14": 6.84e-6
+        };
+
+        // --- Seção Transversal ---
+        const sectionTemplates = {
+            square: `
+                <div class="input-group">
+                    <label for="section-side">Lado (mm):</label>
+                    <input type="number" id="section-side" value="100" min="1">
+                </div>
+            `,
+            'i-profile': `
+                <div class="input-group">
+                    <label for="i-profile-select">Selecione o Perfil W:</label>
+                    <select id="i-profile-select">
+                        ${Object.keys(iProfileData).map(profile => `<option value="${iProfileData[profile]}">${profile}</option>`).join('')}
+                    </select>
+                </div>
+            `
+        };
+
+        function updateSectionInputs() {
+            sectionInputsDiv.innerHTML = sectionTemplates[sectionTypeSelect.value];
+            calculateMomentOfInertia();
+        }
+
+        function calculateMomentOfInertia() {
+            const type = sectionTypeSelect.value;
+            let I = 0; // m^4
+            try {
+                if (type === 'square') {
+                    const a = parseFloat(document.getElementById('section-side').value) / 1000; // to meters
+                    if (isNaN(a)) throw new Error();
+                    I = Math.pow(a, 4) / 12;
+                } else if (type === 'i-profile') {
+                    const profileSelect = document.getElementById('i-profile-select');
+                    I = parseFloat(profileSelect.value);
+                    if (isNaN(I)) throw new Error();
+                }
+                momentOfInertiaP.textContent = `${I.toExponential(4)} m⁴`;
+                beam.I = I;
+            } catch (e) {
+                momentOfInertiaP.textContent = 'Entrada inválida';
+                beam.I = 0;
+            }
+        }
+        
+        // --- Cargas ---
+        loadTypeSelect.addEventListener('change', () => {
+            const type = loadTypeSelect.value;
+            loadEndPositionGroup.classList.toggle('hidden', type !== 'rect' && type !== 'tri');
+        });
+
+        addLoadBtn.addEventListener('click', () => {
+            const type = loadTypeSelect.value;
+            const magnitude = parseFloat(loadMagnitudeInput.value);
+            const position = parseFloat(loadPositionInput.value);
+            const beamLength = parseFloat(beamLengthInput.value);
+
+            if (isNaN(magnitude) || isNaN(position) || position < 0 || position > beamLength) {
+                alert('Módulo ou posição do esforço inválido.');
+                return;
+            }
+
+            let load = { type, magnitude, position };
+            if (type === 'rect' || type === 'tri') {
+                const endPosition = parseFloat(loadEndPositionInput.value);
+                if (isNaN(endPosition) || endPosition <= position || endPosition > beamLength) {
+                    alert('Posição final do carregamento inválida.');
+                    return;
+                }
+                load.endPosition = endPosition;
+            }
+            loads.push(load);
+            renderLoadsList();
+        });
+
+        function renderLoadsList() {
+            loadsListUl.innerHTML = '';
+            if (loads.length === 0) {
+                loadsListUl.innerHTML = '<li class="text-gray-500">Nenhum esforço adicionado.</li>';
+                return;
+            }
+            loads.forEach((load, index) => {
+                const li = document.createElement('li');
+                let text = `[${index + 1}] ${load.type.charAt(0).toUpperCase() + load.type.slice(1)}: ${load.magnitude} @ ${load.position}m`;
+                if (load.endPosition) {
+                    text += ` a ${load.endPosition}m`;
+                }
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'X';
+                deleteBtn.className = 'btn-danger ml-2 px-2 py-0 text-xs';
+                deleteBtn.onclick = () => {
+                    loads.splice(index, 1);
+                    renderLoadsList();
+                };
+                li.textContent = text;
+                li.appendChild(deleteBtn);
+                loadsListUl.appendChild(li);
+            });
+        }
+        
+        // --- Cálculo Principal e Desenho ---
+        function performCalculations() {
+            // Atualiza os dados da viga com os valores dos inputs
+            beam.length = parseFloat(beamLengthInput.value);
+            beam.E = parseFloat(elasticityModulusInput.value) * 1e9; // GPa to Pa
+            beam.type = beamTypeSelect.value;
+            calculateMomentOfInertia();
+            
+            if (beam.I === 0) {
+                alert('Momento de inércia inválido. Verifique as dimensões da seção.');
+                return;
+            }
+
+            // 1. Calcular Reações nos Apoios
+            calculateReactions();
+
+            // 2. Calcular a curva M/EI
+            const resolution = 200; // Número de pontos para calcular a curva
+            const EI = beam.E * beam.I;
+            const M_over_EI_diagram = [];
+            for (let i = 0; i <= resolution; i++) {
+                const x = (i / resolution) * beam.length;
+                const moment = calculateMomentAt(x);
+                M_over_EI_diagram.push({ x: x, y: moment / EI });
+            }
+
+            // 3. Aplicar Teoremas do Momento de Área
+            calculateElasticCurve(M_over_EI_diagram);
+            
+            // 4. Desenhar a viga e os resultados
+            drawBeam();
+        }
+
+        function calculateMomentAt(x) {
+            let moment = 0;
+            const { RA, RB, MA } = beam.reactions;
+
+            if (beam.type === 'cantilever') {
+                moment += MA; // Momento no engaste
+                moment += RA * x;
+            } else { // 'simply-supported'
+                moment += RA * x;
+            }
+
+            loads.forEach(load => {
+                if (x > load.position) {
+                    switch (load.type) {
+                        case 'point':
+                            moment -= load.magnitude * 1000 * (x - load.position);
+                            break;
+                        case 'moment':
+                            moment += load.magnitude * 1000;
+                            break;
+                        case 'rect':
+                            const end = Math.min(x, load.endPosition);
+                            const length = end - load.position;
+                            const resultant = load.magnitude * 1000 * length;
+                            const centroid = load.position + length / 2;
+                            moment -= resultant * (x - centroid);
+                            break;
+                        case 'tri':
+                            if (x <= load.endPosition) {
+                                const loadLength = load.endPosition - load.position;
+                                const heightAtX = load.magnitude * 1000 * (x-load.position) / loadLength;
+                                const resultant = 0.5 * (x-load.position) * heightAtX;
+                                moment -= resultant * (x - (load.position + (x-load.position) * 2/3));
+                            } else {
+                                const loadLength = load.endPosition - load.position;
+                                const resultant = 0.5 * loadLength * load.magnitude * 1000;
+                                const centroid = load.position + loadLength * 2 / 3;
+                                moment -= resultant * (x-centroid);
+                            }
+                            break;
+                    }
+                }
+            });
+            return moment;
+        }
+
+        function calculateReactions() {
+            let RA = 0, RB = 0, MA = 0; // N, Nm
+            const L = beam.length;
+
+            loads.forEach(load => {
+                const P = load.magnitude * 1000;
+                const a = load.position;
+                if (beam.type === 'cantilever') {
+                    if (load.type === 'point') {
+                        RA += P;
+                        MA -= P * a;
+                    } else if (load.type === 'moment') {
+                        MA += P;
+                    } else if (load.type === 'rect') {
+                         const len = load.endPosition - a;
+                         RA += P * len;
+                         MA -= (P * len) * (a + len/2);
+                    } else if (load.type === 'tri') {
+                         const len = load.endPosition - a;
+                         RA += 0.5 * P * len;
+                         MA -= (0.5 * P * len) * (a + len * 2/3);
+                    }
+                } else { // simply-supported
+                    if (load.type === 'point') {
+                        RB += P * a / L;
+                    } else if (load.type === 'moment') {
+                        RB += P / L;
+                    } else if (load.type === 'rect') {
+                         const len = load.endPosition - a;
+                         RB += (P * len) * (a + len / 2) / L;
+                    } else if (load.type === 'tri') {
+                        const len = load.endPosition - a;
+                        RB += (0.5 * P * len) * (a + len * 2 / 3) / L;
+                    }
+                }
+            });
+            
+            // Reação RA para viga bi-apoiada
+            if (beam.type === 'simply-supported') {
+                 let totalLoad = 0;
+                 loads.forEach(load => {
+                     const P = load.magnitude * 1000;
+                     if(load.type === 'point') totalLoad += P;
+                     if(load.type === 'rect') totalLoad += P * (load.endPosition - load.position);
+                     if(load.type === 'tri') totalLoad += 0.5 * P * (load.endPosition - load.position);
+                 });
+                 RA = totalLoad - RB;
+            }
+
+            beam.reactions = { RA, RB, MA };
+        }
+
+        function calculateElasticCurve(M_over_EI) {
+            beam.elasticCurve = [];
+            let slope = 0;
+            let deflection = 0;
+
+            if (beam.type === 'cantilever') {
+                // Engaste em x=0, então slope(0)=0 e deflection(0)=0
+                slope = 0;
+                deflection = 0;
+                beam.elasticCurve.push({ x: 0, slope, deflection });
+                
+                for (let i = 0; i < M_over_EI.length - 1; i++) {
+                    const dx = M_over_EI[i+1].x - M_over_EI[i].x;
+                    const area = (M_over_EI[i].y + M_over_EI[i+1].y) / 2 * dx;
+                    slope += area; // Teorema 1: θ = ∫(M/EI)dx
+                    deflection += slope * dx; // Integrando a inclinação para obter deflexão
+                    beam.elasticCurve.push({ x: M_over_EI[i+1].x, slope, deflection });
+                }
+            } else { // simply-supported
+                // Condições: v(0)=0, v(L)=0. Precisamos encontrar slope(0).
+                // Teorema 2: t_B/A = ∫[A a B] x (M/EI) dx
+                // desvio de B relativo à tangente em A é 0.
+                let momentOfArea = 0;
+                for (let i = 0; i < M_over_EI.length - 1; i++) {
+                    const dx = M_over_EI[i+1].x - M_over_EI[i].x;
+                    const x_mid = M_over_EI[i].x + dx / 2;
+                    const area = (M_over_EI[i].y + M_over_EI[i+1].y) / 2 * dx;
+                    momentOfArea += area * x_mid;
+                }
+                const t_B_A = momentOfArea; // Desvio da tangente em B relativo a A.
+                const initialSlope = -t_B_A / beam.length;
+                
+                slope = initialSlope;
+                deflection = 0;
+                beam.elasticCurve.push({ x: 0, slope, deflection });
+
+                for (let i = 0; i < M_over_EI.length - 1; i++) {
+                    const dx = M_over_EI[i+1].x - M_over_EI[i].x;
+                    const area = (M_over_EI[i].y + M_over_EI[i+1].y) / 2 * dx;
+                    slope += area;
+                    deflection += slope * dx;
+                    beam.elasticCurve.push({ x: M_over_EI[i+1].x, slope, deflection });
+                }
+            }
+        }
+        
+        function drawBeam() {
+            const { width, height } = canvasContainer.getBoundingClientRect();
+            canvas.width = width;
+            canvas.height = height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const padding = 40;
+            const y_center = height / 2;
+            const beam_width_px = width - 2 * padding;
+
+            // Desenha viga original
+            ctx.fillStyle = '#6b7280';
+            ctx.fillRect(padding, y_center - 5, beam_width_px, 10);
+            
+            // Desenha apoios
+            ctx.fillStyle = '#374151';
+            if (beam.type === 'cantilever') {
+                ctx.fillRect(padding - 10, y_center - 20, 10, 40);
+            } else { // simply-supported
+                // Apoio Fixo (Pino)
+                ctx.beginPath();
+                ctx.moveTo(padding, y_center + 5);
+                ctx.lineTo(padding - 10, y_center + 20);
+                ctx.lineTo(padding + 10, y_center + 20);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Apoio Móvel (Rolete)
+                const endX = padding + beam_width_px;
+                ctx.beginPath();
+                ctx.moveTo(endX, y_center + 5);
+                ctx.lineTo(endX - 10, y_center + 20);
+                ctx.lineTo(endX + 10, y_center + 20);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(endX, y_center + 25, 5, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+
+            // Desenha cargas
+            loads.forEach(load => {
+                const pos_x = padding + (load.position / beam.length) * beam_width_px;
+                ctx.strokeStyle = '#dc2626';
+                ctx.lineWidth = 2;
+                ctx.fillStyle = '#dc2626';
+
+                if (load.type === 'point') {
+                    ctx.beginPath();
+                    ctx.moveTo(pos_x, y_center - 50);
+                    ctx.lineTo(pos_x, y_center - 5);
+                    ctx.stroke();
+                    ctx.moveTo(pos_x, y_center - 50);
+                    ctx.lineTo(pos_x - 5, y_center - 40);
+                    ctx.lineTo(pos_x + 5, y_center - 40);
+                    ctx.closePath();
+                    ctx.fill();
+                } else if (load.type === 'moment') {
+                    ctx.beginPath();
+                    ctx.arc(pos_x, y_center, 20, Math.PI * 1.5, Math.PI * 0.5, load.magnitude > 0);
+                    ctx.stroke();
+                } else if (load.type === 'rect') {
+                    const end_pos_x = padding + (load.endPosition / beam.length) * beam_width_px;
+                    const rect_width = end_pos_x - pos_x;
+                    for (let i = 0; i <= 10; i++) {
+                        const arrow_x = pos_x + i * (rect_width / 10);
+                        ctx.beginPath();
+                        ctx.moveTo(arrow_x, y_center - 40);
+                        ctx.lineTo(arrow_x, y_center - 5);
+                        ctx.stroke();
+                    }
+                    ctx.strokeRect(pos_x, y_center - 40, rect_width, 0.1);
+                } else if (load.type === 'tri') {
+                    const end_pos_x = padding + (load.endPosition / beam.length) * beam_width_px;
+                    const rect_width = end_pos_x - pos_x;
+                     for (let i = 0; i <= 10; i++) {
+                        const arrow_x = pos_x + i * (rect_width / 10);
+                        const arrow_height = 40 * (i/10);
+                        ctx.beginPath();
+                        ctx.moveTo(arrow_x, y_center - arrow_height);
+                        ctx.lineTo(arrow_x, y_center - 5);
+                        ctx.stroke();
+                    }
+                    ctx.beginPath();
+                    ctx.moveTo(pos_x, y_center - 5);
+                    ctx.lineTo(end_pos_x, y_center - 45);
+                    ctx.stroke();
+                }
+            });
+
+
+            // Desenha linha elástica
+            if (beam.elasticCurve.length > 0) {
+                const maxDeflection = Math.max(...beam.elasticCurve.map(p => Math.abs(p.deflection)));
+                const scale = maxDeflection > 0 ? (height / 4) / maxDeflection : 0;
+                
+                ctx.beginPath();
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 3;
+                
+                beam.elasticCurve.forEach((point, index) => {
+                    const px = padding + (point.x / beam.length) * beam_width_px;
+                    const py = y_center + point.deflection * scale;
+                    if (index === 0) {
+                        ctx.moveTo(px, py);
+                    } else {
+                        ctx.lineTo(px, py);
+                    }
+                });
+                ctx.stroke();
+            }
+        }
+
+        // --- Interatividade ---
+        function updateResults(x_m) {
+            if (!beam.elasticCurve || beam.elasticCurve.length === 0) return;
+            
+            const point = beam.elasticCurve.find(p => p.x >= x_m) || beam.elasticCurve[beam.elasticCurve.length - 1];
+
+            resultPosition.textContent = `${x_m.toFixed(2)} m`;
+            resultSlope.textContent = `${point.slope.toExponential(2)} rad`;
+            resultDeflection.textContent = `${(point.deflection * 1000).toFixed(2)} mm`;
+        }
+
+        function handleCanvasMouseMove(event) {
+            if (!beam.elasticCurve || beam.elasticCurve.length === 0) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const padding = 40;
+            const beam_width_px = canvas.width - 2 * padding;
+            
+            if (mouseX >= padding && mouseX <= canvas.width - padding) {
+                const x_m = ((mouseX - padding) / beam_width_px) * beam.length;
+                
+                const pointIndex = Math.round((x_m / beam.length) * (beam.elasticCurve.length - 1));
+                const point = beam.elasticCurve[pointIndex];
+
+                const maxDeflection = Math.max(...beam.elasticCurve.map(p => Math.abs(p.deflection)));
+                const scale = maxDeflection > 0 ? (canvas.height / 4) / maxDeflection : 0;
+                const y_center = canvas.height / 2;
+
+                const px = padding + (point.x / beam.length) * beam_width_px;
+                const py = y_center + point.deflection * scale;
+                
+                drawBeam(); // Redraw base
+                
+                // Draw point, tangent, and deflection line
+                ctx.fillStyle = '#10b981';
+                ctx.beginPath();
+                ctx.arc(px, py, 5, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // Tangent line
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                const tangentLength = 100;
+                const angle = point.slope;
+                ctx.moveTo(px - tangentLength / 2 * Math.cos(angle), py - tangentLength / 2 * Math.sin(angle));
+                ctx.lineTo(px + tangentLength / 2 * Math.cos(angle), py + tangentLength / 2 * Math.sin(angle));
+                ctx.stroke();
+                
+                // Deflection line
+                ctx.strokeStyle = '#8b5cf6';
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(px, y_center);
+                ctx.lineTo(px, py);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Update tooltip
+                tooltip.style.opacity = '1';
+                tooltip.style.left = `${event.clientX}px`;
+                tooltip.style.top = `${event.clientY}px`;
+                tooltip.innerHTML = `x: ${x_m.toFixed(2)} m<br>θ: ${point.slope.toExponential(2)} rad<br>v: ${(point.deflection*1000).toFixed(2)} mm`;
+
+                updateResults(x_m);
+            }
+        }
+        
+        canvas.addEventListener('mousemove', handleCanvasMouseMove);
+        canvas.addEventListener('mouseleave', () => {
+            tooltip.style.opacity = '0';
+            drawBeam();
+            resultPosition.textContent = "- m";
+            resultSlope.textContent = "- rad";
+            resultDeflection.textContent = "- mm";
+        });
+
+        // Event Listeners
+        sectionTypeSelect.addEventListener('change', updateSectionInputs);
+        sectionInputsDiv.addEventListener('change', calculateMomentOfInertia); // Use 'change' for select dropdowns
+        calculateBtn.addEventListener('click', performCalculations);
+        window.addEventListener('resize', drawBeam);
+
+        // Initial setup
+        updateSectionInputs();
+        renderLoadsList();
+        drawBeam();
+    </script>
+</body>
+</html>
